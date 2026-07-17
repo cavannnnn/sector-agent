@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}预警中心 - 板块轮动 AI 智能体{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header"><i class="bi bi-bell"></i> 预警记录</div>
+    <div class="card-body">
+        {% if alerts %}
+        {% for a in alerts %}
+        <div class="alert-item alert-{{ a.severity }}">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <strong>{{ a.alert_type }}</strong>: {{ a.message }}
+                </div>
+                <span class="text-muted" style="font-size:0.8rem;">{{ a.alert_time[:19] | replace('T', ' ') }}</span>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-center text-muted py-4">暂无预警</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-info-circle"></i> 预警说明</div>
+    <div class="card-body">
+        <p>系统在每次运行时会自动与上一次结果对比，检测以下变化并生成预警：</p>
+        <ul>
+            <li><strong>宏观状态变化</strong>（warning 级别）：如从"加息"转为"降息"，意味着需要调整权重配置</li>
+            <li><strong>选股变化</strong>（info 级别）：做多/做空名单发生变化，新板块进入或旧板块退出</li>
+        </ul>
+        <p>预警会自动保存到数据库，并在仪表盘首页显示最新预警。</p>
+    </div>
+</div>
+{% endblock %}

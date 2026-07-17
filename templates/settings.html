@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}参数设置 - 板块轮动 AI 智能体{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header"><i class="bi bi-sliders"></i> 权重参数设置</div>
+    <div class="card-body">
+        <p class="text-muted">默认权重根据宏观状态自动设定。你可以手动调整三类指标的权重来查看不同配置下的选股结果。</p>
+        <p>当前宏观状态：<span class="regime-badge regime-{{ current_regime }}">{{ current_regime_cn }}</span></p>
+        <p>默认权重：技术 {{ default_weights[0]*100 }}% / 基本面 {{ default_weights[1]*100 }}% / 宏观 {{ default_weights[2]*100 }}%</p>
+
+        <form method="POST" action="/settings">
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">技术面权重</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" name="tech_w" id="techW"
+                               value="{{ custom_weights[0] * 100 }}" min="0" max="100" step="5">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">基本面权重</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" name="fund_w" id="fundW"
+                               value="{{ custom_weights[1] * 100 }}" min="0" max="100" step="5">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">宏观面权重</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" name="macro_w" id="macroW"
+                               value="{{ custom_weights[2] * 100 }}" min="0" max="100" step="5">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+            </div>
+            <p id="weightWarning" class="text-warning" style="display:none;">权重总和必须等于 100%</p>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-calculator"></i> 用自定义权重重算</button>
+            <a href="/settings" class="btn btn-outline-secondary">恢复默认</a>
+        </form>
+    </div>
+</div>
+
+{% if custom_result %}
+<div class="card">
+    <div class="card-header"><i class="bi bi-bar-chart"></i> 自定义权重下的选股结果</div>
+    <div class="card-body">
+        <p>使用权重：技术 {{ custom_weights[0]*100 }}% / 基本面 {{ custom_weights[1]*100 }}% / 宏观 {{ custom_weights[2]*100 }}%</p>
+        <table class="table table-sm">
+            <thead>
+                <tr><th>排名</th><th>板块</th><th>技术</th><th>基本面</th><th>宏观</th><th>综合</th><th>方向</th></tr>
+            </thead>
+            <tbody>
+                {% for row in custom_result.scores_list %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td class="fw-bold">{{ row.sector_cn }}</td>
+                    <td>{{ row.tech }}</td>
+                    <td>{{ row.fund }}</td>
+                    <td>{{ row.macro }}</td>
+                    <td class="fw-bold">{{ row.composite }}</td>
+                    <td>
+                        {% if row.direction == 'long' %}<span class="tag-long">做多</span>
+                        {% elif row.direction == 'short' %}<span class="tag-short">做空</span>
+                        {% else %}<span class="tag-neutral">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <h6><span class="tag-long">做多</span></h6>
+                <p>{{ custom_result.longs | join(', ') }}</p>
+            </div>
+            <div class="col-md-6">
+                <h6><span class="tag-short">做空</span></h6>
+                <p>{{ custom_result.shorts | join(', ') }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-table"></i> 宏观状态权重对照表</div>
+    <div class="card-body">
+        <table class="table table-sm">
+            <thead>
+                <tr><th>宏观状态</th><th>技术面</th><th>基本面</th><th>宏观面</th><th>逻辑</th></tr>
+            </thead>
+            <tbody>
+                <tr class="{{ current_regime == 'Hiking' and 'table-warning' or '' }}">
+                    <td><span class="regime-badge regime-Hiking" style="font-size:0.8rem;">加息周期</span></td>
+                    <td>25%</td><td>35%</td><td>40%</td>
+                    <td style="font-size:0.85rem;">宏观环境决定板块生死，最重要</td>
+                </tr>
+                <tr class="{{ current_regime == 'Cutting' and 'table-info' or '' }}">
+                    <td><span class="regime-badge regime-Cutting" style="font-size:0.8rem;">降息周期</span></td>
+                    <td>35%</td><td>30%</td><td>35%</td>
+                    <td style="font-size:0.85rem;">降息初期波动大，技术面有参考价值</td>
+                </tr>
+                <tr class="{{ current_regime == 'Stagflation' and 'table-danger' or '' }}">
+                    <td><span class="regime-badge regime-Stagflation" style="font-size:0.8rem;">滞胀</span></td>
+                    <td>20%</td><td>40%</td><td>40%</td>
+                    <td style="font-size:0.85rem;">看谁底子硬+谁对通胀免疫</td>
+                </tr>
+                <tr class="{{ current_regime == 'Recovery' and 'table-success' or '' }}">
+                    <td><span class="regime-badge regime-Recovery" style="font-size:0.8rem;">复苏</span></td>
+                    <td>40%</td><td>25%</td><td>35%</td>
+                    <td style="font-size:0.85rem;">看谁先涨起来（动量最重要）</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkWeights() {
+    const t = parseFloat(document.getElementById('techW').value) || 0;
+    const f = parseFloat(document.getElementById('fundW').value) || 0;
+    const m = parseFloat(document.getElementById('macroW').value) || 0;
+    const total = t + f + m;
+    const warning = document.getElementById('weightWarning');
+    if (Math.abs(total - 100) > 0.1) {
+        warning.style.display = 'block';
+        warning.textContent = `权重总和 = ${total}%，必须等于 100%`;
+    } else {
+        warning.style.display = 'none';
+    }
+}
+document.getElementById('techW').addEventListener('input', checkWeights);
+document.getElementById('fundW').addEventListener('input', checkWeights);
+document.getElementById('macroW').addEventListener('input', checkWeights);
+</script>
+{% endblock %}

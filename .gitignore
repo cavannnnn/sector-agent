@@ -1,0 +1,13 @@
+# Cloud deployment files
+__pycache__/
+*.pyc
+*.pyo
+data/*.log
+data/cache/
+static_site/
+# Keep the database for seeding, but don't overwrite cloud persistent disk
+# data/sector_agent.db
+.DS_Store
+*.egg-info/
+.env
+venv/

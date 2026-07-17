@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 - 板块轮动 AI 智能体{% endblock %}
+
+{% block content %}
+{% if latest %}
+<!-- Executive Summary -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-lightning-charge"></i> 当前推荐</span>
+        <span class="regime-badge regime-{{ latest.regime }}">{{ latest.regime_cn }}</span>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-3" style="font-size:0.85rem;">
+            <i class="bi bi-clock"></i> 最后更新：{{ latest.run_time[:19] | replace('T', ' ') }}
+            &nbsp;|&nbsp; <i class="bi bi-arrow-repeat"></i> 类型：{{ latest.run_type }}
+        </p>
+        <p>{{ latest.executive_summary }}</p>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <h6><span class="tag-long">做多 (Long)</span></h6>
+                {% for l in longs_detail %}
+                <div class="d-flex justify-content-between align-items-center py-1">
+                    <span><strong>{{ l.sector_cn }}</strong> ({{ l.sector }})</span>
+                    <span class="text-danger fw-bold">{{ l.score }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="col-md-6">
+                <h6><span class="tag-short">做空 (Short)</span></h6>
+                {% for s in shorts_detail %}
+                <div class="d-flex justify-content-between align-items-center py-1">
+                    <span><strong>{{ s.sector_cn }}</strong> ({{ s.sector }})</span>
+                    <span class="text-success fw-bold">{{ s.score }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary" id="refreshBtn" onclick="triggerRefresh()">
+                <i class="bi bi-arrow-repeat"></i> 立即刷新数据
+            </button>
+            <a href="/report" class="btn btn-outline-secondary">
+                <i class="bi bi-file-earmark-text"></i> 生成完整报告
+            </a>
+            <span id="refreshStatus" class="align-self-center text-muted" style="font-size:0.85rem;"></span>
+        </div>
+    </div>
+</div>
+
+<!-- Alerts -->
+{% if alerts %}
+<div class="card">
+    <div class="card-header"><i class="bi bi-bell"></i> 最新预警</div>
+    <div class="card-body">
+        {% for a in alerts %}
+        <div class="alert-item alert-{{ a.severity }}">
+            <strong>{{ a.alert_type }}</strong>: {{ a.message }}
+            <span class="text-muted float-end" style="font-size:0.8rem;">{{ a.alert_time[:19] | replace('T', ' ') }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Composite Score Chart -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-bar-chart"></i> 11 板块综合得分</div>
+            <div class="card-body">
+                <div style="position:relative; height:300px; width:100%;">
+                    <canvas id="scoreChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Score Breakdown -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-pie-chart"></i> 三类得分分解</div>
+            <div class="card-body">
+                <div style="position:relative; height:300px; width:100%;">
+                    <canvas id="breakdownChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Macro Dashboard -->
+<div class="card">
+    <div class="card-header"><i class="bi bi-globe"></i> 宏观状态仪表盘</div>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col metric-card">
+                <div class="metric-value text-danger">{{ macro.US10Y_level | round(2) }}%</div>
+                <div class="metric-label">10年期国债收益率</div>
+                <div class="text-muted" style="font-size:0.75rem;">6月变动 {{ macro.US10Y_chg6m > 0 and '+' or '' }}{{ macro.US10Y_chg6m | round(2) }}pp</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value text-warning">${{ macro.Oil_level | round(1) }}</div>
+                <div class="metric-label">原油价格 (USD)</div>
+                <div class="text-muted" style="font-size:0.75rem;">6月涨幅 +{{ macro.Oil_6m_ret | round(1) }}%</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value text-success">+{{ macro.SP_6m_ret | round(1) }}%</div>
+                <div class="metric-label">标普500 (6月)</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value" style="color:#534AB7">{{ macro.VIX_level | round(1) }}</div>
+                <div class="metric-label">VIX 恐慌指数</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value text-info">{{ macro.YieldCurve | round(2) }}%</div>
+                <div class="metric-label">收益率曲线 (10Y-3M)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Heatmap -->
+<div class="card">
+    <div class="card-header"><i class="bi bi-grid-3x3"></i> 板块 × 指标热力图 (z-score)</div>
+    <div class="card-body" style="overflow-x:auto;">
+        <table class="table table-sm text-center" style="font-size:0.8rem;">
+            <thead>
+                <tr>
+                    <th>板块</th>
+                    {% for col in heatmap_cols %}
+                    <th>{{ col }}</th>
+                    {% endfor %}
+                    <th>综合</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in heatmap_rows %}
+                <tr>
+                    <td class="text-start fw-bold">
+                        {% if row.direction == 'long' %}<span class="tag-long">多</span>
+                        {% elif row.direction == 'short' %}<span class="tag-short">空</span>
+                        {% endif %}
+                        {{ row.sector_cn }}
+                    </td>
+                    {% for val in row.cells %}
+                    <td style="background:{{ val.bg }}; color:{{ val.color }};">{{ val.text }}</td>
+                    {% endfor %}
+                    <td style="background:{{ row.composite_bg }}; color:{{ row.composite_color }}; font-weight:700;">
+                        {{ row.composite_text }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="text-muted text-center" style="font-size:0.75rem;">
+            红色 = 高于平均（利好做多），绿色 = 低于平均（利好做空）
+        </div>
+    </div>
+</div>
+
+<!-- Reasoning -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header text-danger"><i class="bi bi-arrow-up-circle"></i> 做多推理</div>
+            <div class="card-body">
+                {% for l in longs_detail %}
+                <div class="mb-3">
+                    <h6><span class="tag-long">做多</span> {{ l.sector_cn }} ({{ l.sector }}) — 得分 {{ l.score }}</h6>
+                    {% for r in l.reasons %}
+                    <div class="reason-item" style="font-size:0.88rem;">{{ r }}</div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header text-success"><i class="bi bi-arrow-down-circle"></i> 做空推理</div>
+            <div class="card-body">
+                {% for s in shorts_detail %}
+                <div class="mb-3">
+                    <h6><span class="tag-short">做空</span> {{ s.sector_cn }} ({{ s.sector }}) — 得分 {{ s.score }}</h6>
+                    {% for r in s.reasons %}
+                    <div class="reason-item" style="font-size:0.88rem;">{{ r }}</div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scenarios -->
+<div class="card">
+    <div class="card-header"><i class="bi bi-shuffle"></i> 情景分析</div>
+    <div class="card-body">
+        <table class="table table-sm">
+            <thead>
+                <tr><th>情景</th><th>触发条件</th><th>受益板块</th><th>受损板块</th></tr>
+            </thead>
+            <tbody>
+                {% for sc in scenarios %}
+                <tr>
+                    <td><strong>{{ sc.label }}</strong>：{{ sc.name }}</td>
+                    <td>{{ sc.trigger }}</td>
+                    <td class="text-danger">{{ sc.winners }}</td>
+                    <td class="text-success">{{ sc.losers }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if backtest %}
+<!-- Backtest -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-graph-down"></i> 回测表现</span>
+        <span class="text-muted" style="font-size:0.8rem;">滚动 30 个月 · 每月再平衡</span>
+    </div>
+    <div class="card-body">
+        <!-- Key Metrics -->
+        <div class="row text-center mb-3">
+            <div class="col metric-card">
+                <div class="metric-value">{{ backtest.n_months }}</div>
+                <div class="metric-label">回测月数</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value {% if backtest.ls_annualized > 0 %}text-danger{% else %}text-success{% endif %}">
+                    {{ backtest.ls_annualized | round(2) }}%
+                </div>
+                <div class="metric-label">多空年化收益</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value text-success">{{ backtest.eq_annualized | round(2) }}%</div>
+                <div class="metric-label">等权年化收益</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value">{{ backtest.hit_rate | round(0) }}%</div>
+                <div class="metric-label">胜率</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value">{{ backtest.ls_sharpe | round(2) }}</div>
+                <div class="metric-label">夏普比率</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value {% if backtest.ls_cumulative > 0 %}text-danger{% else %}text-success{% endif %}">
+                    {{ backtest.ls_cumulative | round(1) }}%
+                </div>
+                <div class="metric-label">多空累计收益</div>
+            </div>
+            <div class="col metric-card">
+                <div class="metric-value text-success">{{ backtest.eq_cumulative | round(1) }}%</div>
+                <div class="metric-label">等权累计收益</div>
+            </div>
+        </div>
+
+        <!-- Backtest Chart -->
+        <div style="position:relative; height:350px; width:100%;">
+            <canvas id="backtestChart"></canvas>
+        </div>
+
+        <!-- Monthly Returns Table -->
+        <div class="mt-3" style="overflow-x:auto;">
+            <table class="table table-sm text-center" style="font-size:0.78rem;">
+                <thead>
+                    <tr>
+                        <th>月份</th>
+                        <th>多空收益</th>
+                        <th>等权收益</th>
+                        <th>多空累计</th>
+                        <th>等权累计</th>
+                    </tr>
+                </thead>
+                <tbody id="btTableBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="text-muted mt-2" style="font-size:0.78rem;">
+            <i class="bi bi-info-circle"></i> 回测说明：每月末根据框架打分选择 3 做多 + 3 做空板块，持有至下月末。多空收益 = 做多平均收益 - 做空平均收益。等权基准 = 11 板块等权持有。2024–2026 为强牛市环境，做空端受 beta 拖累。
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-database" style="font-size:3rem; color:#ccc;"></i>
+        <h4 class="mt-3 text-muted">暂无数据</h4>
+        <p class="text-muted">点击下方按钮抓取最新数据并生成推荐</p>
+        <button class="btn btn-primary btn-lg" onclick="triggerRefresh()">
+            <i class="bi bi-arrow-repeat"></i> 立即更新
+        </button>
+        <span id="refreshStatus" class="d-block mt-3 text-muted"></span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if latest %}
+<script>
+// ===== Composite Score Chart =====
+const scoreCtx = document.getElementById('scoreChart').getContext('2d');
+const scoreLabels = {{ score_chart_labels | safe }};
+const scoreData = {{ score_chart_data | safe }};
+const scoreColors = {{ score_chart_colors | safe }};
+new Chart(scoreCtx, {
+    type: 'bar',
+    data: {
+        labels: scoreLabels,
+        datasets: [{
+            label: '综合得分',
+            data: scoreData,
+            backgroundColor: scoreColors,
+            borderWidth: 0,
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: function(ctx) { return '得分: ' + ctx.parsed.x.toFixed(3); }
+                }
+            }
+        },
+        scales: { x: { grid: { color: '#f0f0f0' } } }
+    }
+});
+
+// ===== Breakdown Chart =====
+const bdCtx = document.getElementById('breakdownChart').getContext('2d');
+new Chart(bdCtx, {
+    type: 'bar',
+    data: {
+        labels: {{ breakdown_labels | safe }},
+        datasets: [
+            { label: '技术面', data: {{ breakdown_tech | safe }}, backgroundColor: '#378ADD', borderRadius: 3 },
+            { label: '基本面', data: {{ breakdown_fund | safe }}, backgroundColor: '#BA7517', borderRadius: 3 },
+            { label: '宏观面', data: {{ breakdown_macro | safe }}, backgroundColor: '#1D9E75', borderRadius: 3 },
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+        scales: { x: { grid: { display: false } }, y: { grid: { color: '#f0f0f0' } } }
+    }
+});
+
+{% if backtest %}
+// ===== Backtest Chart =====
+const btCtx = document.getElementById('backtestChart').getContext('2d');
+const btLabels = {{ bt_labels | safe }};
+const btLsData = {{ bt_ls | safe }};
+const btEqData = {{ bt_eq | safe }};
+
+// Gradient fills
+const lsGradient = btCtx.createLinearGradient(0, 0, 0, 350);
+lsGradient.addColorStop(0, 'rgba(163, 45, 45, 0.25)');
+lsGradient.addColorStop(1, 'rgba(163, 45, 45, 0.02)');
+
+const eqGradient = btCtx.createLinearGradient(0, 0, 0, 350);
+eqGradient.addColorStop(0, 'rgba(24, 95, 165, 0.25)');
+eqGradient.addColorStop(1, 'rgba(24, 95, 165, 0.02)');
+
+new Chart(btCtx, {
+    type: 'line',
+    data: {
+        labels: btLabels,
+        datasets: [
+            {
+                label: '多空策略 (L/S)',
+                data: btLsData,
+                borderColor: '#A32D2D',
+                backgroundColor: lsGradient,
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#A32D2D',
+            },
+            {
+                label: '等权基准 (11板块)',
+                data: btEqData,
+                borderColor: '#185FA5',
+                backgroundColor: eqGradient,
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#185FA5',
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: { boxWidth: 14, font: { size: 13 } }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(33, 37, 41, 0.95)',
+                titleFont: { size: 13 },
+                bodyFont: { size: 12 },
+                padding: 10,
+                callbacks: {
+                    label: function(ctx) {
+                        return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + ' (基期=100)';
+                    }
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: { display: false },
+                ticks: { font: { size: 11 }, maxRotation: 45 }
+            },
+            y: {
+                grid: { color: '#f0f0f0' },
+                ticks: {
+                    font: { size: 11 },
+                    callback: function(v) { return v.toFixed(0); }
+                },
+                title: { display: true, text: '累计净值 (基期=100)', font: { size: 12 } }
+            }
+        }
+    }
+});
+
+// ===== Populate monthly returns table =====
+const btTableBody = document.getElementById('btTableBody');
+if (btTableBody && btLabels.length > 0) {
+    let html = '';
+    for (let i = 0; i < btLabels.length; i++) {
+        const lsMonth = i === 0 ? 0 : (btLsData[i] / btLsData[i-1] - 1) * 100;
+        const eqMonth = i === 0 ? 0 : (btEqData[i] / btEqData[i-1] - 1) * 100;
+        const lsColor = lsMonth >= 0 ? '#A32D2D' : '#27500A';
+        const eqColor = '#185FA5';
+        html += '<tr>' +
+            '<td>' + btLabels[i] + '</td>' +
+            '<td style="color:' + lsColor + '; font-weight:600;">' + (lsMonth >= 0 ? '+' : '') + lsMonth.toFixed(2) + '%</td>' +
+            '<td style="color:' + eqColor + ';">' + (eqMonth >= 0 ? '+' : '') + eqMonth.toFixed(2) + '%</td>' +
+            '<td>' + btLsData[i].toFixed(2) + '</td>' +
+            '<td>' + btEqData[i].toFixed(2) + '</td>' +
+            '</tr>';
+    }
+    btTableBody.innerHTML = html;
+}
+{% endif %}
+
+// ===== AJAX Data Refresh =====
+let refreshPollTimer = null;
+
+function triggerRefresh() {
+    const btn = document.getElementById('refreshBtn');
+    const status = document.getElementById('refreshStatus');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 刷新中...'; }
+    if (status) { status.innerHTML = '<span class="text-primary">正在启动刷新...</span>'; }
+
+    fetch('/api/refresh', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'started') {
+                if (status) { status.innerHTML = '<span class="text-primary"><span class="spinner-border spinner-border-sm"></span> ' + data.message + '</span>'; }
+                startPolling();
+            } else if (data.status === 'already_running') {
+                if (status) { status.innerHTML = '<span class="text-warning">' + data.message + '</span>'; }
+                startPolling();
+            } else if (data.status === 'rate_limited') {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 立即刷新数据'; }
+                if (status) { status.innerHTML = '<span class="text-danger">' + data.message + '</span>'; }
+            }
+        })
+        .catch(err => {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 立即刷新数据'; }
+            if (status) { status.innerHTML = '<span class="text-danger">请求失败: ' + err + '</span>'; }
+        });
+}
+
+function startPolling() {
+    if (refreshPollTimer) clearInterval(refreshPollTimer);
+    refreshPollTimer = setInterval(checkRefreshStatus, 3000);
+    checkRefreshStatus(); // immediate check
+}
+
+function checkRefreshStatus() {
+    fetch('/api/refresh-status')
+        .then(r => r.json())
+        .then(data => {
+            const status = document.getElementById('refreshStatus');
+            const btn = document.getElementById('refreshBtn');
+            if (data.running) {
+                if (status) { status.innerHTML = '<span class="text-primary"><span class="spinner-border spinner-border-sm"></span> ' + (data.progress || '处理中...') + '</span>'; }
+            } else {
+                clearInterval(refreshPollTimer);
+                refreshPollTimer = null;
+                if (data.error) {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 立即刷新数据'; }
+                    if (status) { status.innerHTML = '<span class="text-danger">刷新失败: ' + data.error + '</span>'; }
+                } else {
+                    if (status) { status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> 刷新完成！页面即将重载...</span>'; }
+                    setTimeout(() => location.reload(), 1500);
+                }
+            }
+        })
+        .catch(() => {});
+}
+
+// Check if a refresh is already in progress on page load
+fetch('/api/refresh-status')
+    .then(r => r.json())
+    .then(data => { if (data.running) startPolling(); })
+    .catch(() => {});
+</script>
+{% endif %}
+{% endblock %}

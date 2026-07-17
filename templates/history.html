@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}历史记录 - 板块轮动 AI 智能体{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header"><i class="bi bi-clock-history"></i> 历史运行记录</div>
+    <div class="card-body">
+        {% if runs %}
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>类型</th>
+                    <th>宏观状态</th>
+                    <th>做多</th>
+                    <th>做空</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in runs %}
+                <tr>
+                    <td style="font-size:0.85rem;">{{ r.run_time[:19] | replace('T', ' ') }}</td>
+                    <td>
+                        {% if r.run_type == 'auto' %}
+                        <span class="badge bg-info">自动</span>
+                        {% else %}
+                        <span class="badge bg-secondary">手动</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="regime-badge regime-{{ r.regime }}" style="font-size:0.8rem;">{{ r.regime_cn }}</span></td>
+                    <td>
+                        {% for l in r.longs_list %}
+                        <span class="tag-long">{{ l }}</span>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% for s in r.shorts_list %}
+                        <span class="tag-short">{{ s }}</span>
+                        {% endfor %}
+                    </td>
+                    <td><a href="/run/{{ r.id }}" class="btn btn-sm btn-outline-primary">详情</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="text-center text-muted py-4">暂无历史记录</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Selection Change Tracker -->
+{% if selection_changes and selection_changes|length > 1 %}
+<div class="card">
+    <div class="card-header"><i class="bi bi-diagram-3"></i> 选股变化追踪</div>
+    <div class="card-body">
+        <div style="overflow-x:auto;">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>宏观状态</th>
+                    <th>做多 1</th>
+                    <th>做多 2</th>
+                    <th>做多 3</th>
+                    <th>做空 1</th>
+                    <th>做空 2</th>
+                    <th>做空 3</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sc in selection_changes|reverse %}
+                <tr>
+                    <td style="font-size:0.8rem;">{{ sc.run_time[:10] }}</td>
+                    <td><span class="regime-badge regime-{{ sc.regime }}" style="font-size:0.75rem;">{{ sc.regime_cn }}</span></td>
+                    {% for l in sc.longs_list %}
+                    <td class="text-danger" style="font-size:0.85rem;">{{ l }}</td>
+                    {% endfor %}
+                    {% for s in sc.shorts_list %}
+                    <td class="text-success" style="font-size:0.85rem;">{{ s }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

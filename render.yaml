@@ -1,0 +1,35 @@
+# Render Blueprint - Sector Rotation AI Agent
+# https://render.com/docs/blueprint-spec
+services:
+  # --- Web Service (Flask Dashboard) ---
+  - type: web
+    name: sector-rotation-agent
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./start.sh
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_PATH
+        value: /data/sector_agent.db
+    disk:
+      name: sector-data
+      mountPath: /data
+      sizeGB: 1
+    healthCheckPath: /api/latest
+    autoDeploy: true
+
+  # --- Cron Job (Weekly Auto-Refresh) ---
+  - type: cron
+    name: sector-weekly-refresh
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: DATABASE_PATH=/data/sector_agent.db python3 scheduler.py
+    schedule: "0 9 * * 1"  # Every Monday 9:00 UTC
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_PATH
+        value: /data/sector_agent.db
